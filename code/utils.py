@@ -5,10 +5,11 @@ from collections import namedtuple
 from nltk.corpus import stopwords
 import seaborn as sns
 import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 from sklearn.feature_extraction import stop_words
 
 
-Sentence = namedtuple('Sentence', ['sid', 'section', 'title', 'text', 'subj', 'v', 'obj'])
+Sentence = namedtuple('Sentence', ['sid', 'section', 'part', 'text', 'subj', 'v', 'obj'])
 
 SUBJECTS = ['nsubj', 'nsubjpass', 'csubj', 'csubjpass', 'agent', 'expl']
 
@@ -76,7 +77,7 @@ def get_headnotes(html, prefix, tag='headnote-e'):
     return headnotes
 
 
-def get_breadth_first_nodes(root):
+def bfs(root):
     nodes = []
     stack = [root]
     while stack:
@@ -90,20 +91,19 @@ def get_breadth_first_nodes(root):
 
 def get_all(sent, tags):
     all_tokens = [token for token in sent if token.dep_ in tags]
-                  #and token.head.dep_ == 'ROOT']
     bag_of_words = []
     for token in all_tokens:
-        bag_of_words += get_breadth_first_nodes(token)
+        bag_of_words += bfs(token)
     return ' '.join([t.text for t in sorted(bag_of_words, key=lambda t: t.i)])
 
 
-def make_sentence(sent_id, sent, section, title):
+def make_sentence(sent_id, sent, section, part):
     verbs = [token.head if token.tag_ == 'MD' else token
              for token in sent if token.lemma_ in BURDENS]
     return Sentence(
         sid=sent_id,
         section=section,
-        title=title,
+        part=part,
         text=sent.text,
         subj=get_all(sent, SUBJECTS),
         v=verbs,
@@ -115,9 +115,48 @@ def vocab_barplot(df, label, max_rank=10):
     
     subset = df[(df['rank'] <= max_rank) & (df.label == label)]
     
-    plt.figure(figsize=(15,5))
+    plt.figure(figsize=(20,5))
     sns.barplot(data=subset, x='word', y='count', hue='label')
     plt.xticks(rotation=50)
     plt.xlabel('Word')
     plt.ylabel('Number of Occurrences')
     plt.show()
+    
+
+def group_wordcloud(df, label, max_words=20):
+    
+    freq = dict([(key, value) for key, value in df[df.label == label][['word', 'count']].values])
+    
+    wordcloud = WordCloud(
+        max_font_size=50, max_words=max_words, background_color="white"
+    ).generate_from_frequencies(frequencies=freq)
+    
+    plt.figure(figsize=(20,5))
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
+    plt.show()
+    
+
+def combined_plots(df, label, max_rank=10, max_words=50):
+    
+    subset = df[(df['rank'] <= max_rank) & (df.label == label)]
+
+    freq = dict([(key, value) for key, value in df[df.label == label][['word', 'count']].values])
+    
+    wordcloud = WordCloud(
+        max_font_size=50, max_words=max_words, background_color="white"
+    ).generate_from_frequencies(frequencies=freq)
+    
+    plt.figure(figsize=(20,5))
+
+    plt.subplot(1, 2, 1)
+    plt.bar(x=subset['word'], height=subset['count'])
+    plt.xticks(rotation=50)
+    plt.xlabel('Word')
+    plt.ylabel('Number of Occurrences')
+
+    plt.subplot(1, 2, 2)
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
+    plt.show();
+    
